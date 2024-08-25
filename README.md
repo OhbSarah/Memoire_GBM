@@ -1,6 +1,7 @@
 # Projet de Mémoire : Classification des Gliomes
 
 Ce dépôt contient un notebook R et les données utilisées pour l'analyse des gliomes.
+Les données utilisées proviennent de Kaggle : \url{https://www.kaggle.com/datasets/tanshihjen/clinical-gliomagrading}
 
 ## Structure du Répertoire
 - `script.Rmd` : Script principal pour l'analyse.
