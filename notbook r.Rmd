@@ -1,0 +1,473 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+install.packages("gbm")
+library(gbm)
+setwd("C:/Users/ouaha/Downloads/master")
+data <- read.csv('clinical_glioma_grading.csv', sep=",")
+head(data)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+install.packages("ggplot2")
+install.packages("gridExtra")
+dim(data)
+names(data)
+library(ggplot2)
+data$Gender <- as.factor(data$Gender)
+data$Race <- as.factor(data$Race)
+
+```
+
+
+```{r}
+data$Grade <- as.factor(data$Grade)
+options(repr.plot.width=8, repr.plot.height=6)
+bar3=ggplot(data, aes(x = Grade, fill = Grade)) + 
+  geom_bar() + labs(title="Distribution of Glioma Grades") +
+  scale_fill_manual(values = c("cadetblue2", "cadetblue4"), labels = c("LGG", "GBM")) + theme(
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold")  # Centrer et augmenter la taille du titre
+  )
+bar3
+head(data)
+```
+
+
+```{r}
+GenderBar=ggplot(data, aes(x = Gender, fill = Grade)) + scale_fill_manual(values = c("cadetblue4", "coral2"), labels = c("LGG", "GBM"), name = "Grade") +  scale_x_discrete(labels = c("Males", "Females"))+
+  geom_bar( position = "dodge")+labs(title = "Distribution of Gender")+ theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+
+Racebar=ggplot(data, aes(x = Race, fill = Grade)) + scale_fill_manual(values = c("cadetblue2", "coral"), labels = c("LGG", "GBM"), name = "Grade") +
+  geom_bar( position = "dodge")+labs(title = "Distribution of Race")+ theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+
+options(repr.plot.width=15, repr.plot.height=8)
+grid.arrange(GenderBar,Racebar, ncol=2)
+head(data)
+```
+
+
+```{r}
+ggplot(data) + aes(x = Grade, y = Age_at_diagnosis, fill = Grade) +
+  geom_boxplot() + scale_fill_manual(values = c("cadetblue2", "cadetblue4"), labels = c("LGG", "GBM")) +
+  labs(title = "Distribution de l'âge par Grade") +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"))
+head(data)
+```
+```{r}
+data$Grade <- as.numeric(as.character(data$Grade))
+data$Gender <- as.numeric(as.character(data$Gender))
+data$Race <- as.numeric(as.character(data$Race))
+cor_matrix=cor(data,use = "complete.obs")
+cor_matrix
+```
+
+
+```{r}
+train_index <- sample(1:nrow(data), 0.7 * nrow(data))  # 70% pour l'entraînement
+
+# Créer les ensembles d'entraînement et de test
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+head(test_data)
+head(train_data)
+```
+
+
+```{r}
+model_ref <- gbm(
+  formula = Grade ~ .,  # Utiliser toutes les caractéristiques pour prédire 'Grade'
+  distribution = "bernoulli",  # Pour la classification binaire
+  data = train_data,  # Utiliser l'ensemble d'entraînement
+  n.trees = 100,  # Nombre d'arbres
+  interaction.depth = 1,  # Profondeur d'interaction
+  n.minobsinnode = 10,  # Nombre minimum d'observations dans un noeud
+  shrinkage = 1,  # Taux d'apprentissage élevé pour le modèle de référence
+  bag.fraction = 0.5,  # Fraction des données utilisée pour chaque arbre
+  train.fraction = 1,  # Utiliser toutes les données d'entraînement
+  cv.folds = 0,  # Pas de validation croisée interne
+  keep.data = TRUE,  # Garder les données dans l'objet gbm
+  verbose = TRUE  # Afficher les informations pendant l'entraînement
+)
+```
+
+
+```{r}
+install.packages("pROC")
+library(pROC)
+train_predictions1 <- predict(model_ref, n.trees = model_ref$n.trees, type = "response")
+test_predictions1 <- predict(model_ref, newdata = test_data, n.trees = model_ref$n.trees, type = "response")
+
+# Courbe ROC pour l'ensemble d'entraînement
+train_roc1 <- roc(train_data$Grade, train_predictions1)
+auc_train1 <- auc(train_roc1)
+
+# Courbe ROC pour l'ensemble de test
+test_roc1 <- roc(test_data$Grade, test_predictions1)
+auc_test1 <- auc(test_roc1)
+
+# Tracer les courbes ROC
+plot(train_roc1, col = "cyan4", main = "Receiver Operating Characteristic (ROC) Curve")
+plot(test_roc1, add = TRUE, col = "pink")
+
+# Ajouter la légende
+legend("bottomright", legend = c(paste("Train ROC curve (AUC = ", round(auc_train1, 2), ")", sep=""),
+                                 paste("Test ROC curve (AUC = ", round(auc_test1, 2), ")", sep="")),
+       col = c("cyan4", "pink"), lwd = 2)
+```
+
+
+
+```{r}
+# Supposons que vous avez déjà les prédictions du modèle
+# 'test_predictions' contient les probabilités prédites pour l'ensemble de test
+# 'test_data$Grade' contient les vraies classes (0 ou 1)
+
+# Créer un tableau avec les vraies classes et les prédictions
+results1 <- data.frame(
+  Actual = test_data$Grade,  # Les vraies classes
+  Predicted_Probabilities1 = test_predictions1  # Les probabilités prédites par le modèle
+)
+
+# Ajouter une colonne pour les classes prédites (0 ou 1)
+results1$Predicted_Class1 <- ifelse(results1$Predicted_Probabilities1 > 0.5, 1, 0)
+
+# Ajouter une colonne 'ID' pour identifier chaque observation
+results1$ID <- 1:nrow(results1)
+
+# Créer le graphique pour les vraies classes
+plot_actual1 <- ggplot(results1, aes(x = ID, y = Predicted_Probabilities1, color = as.factor(Actual))) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("lightblue4", "lightcoral"), labels = c("LGG", "GBM")) +
+  labs(title = "Vraies Classes des Points",
+       x = "ID des Observations",
+       y = "Probabilité Prédite",
+       color = "Classe Réelle") +
+  theme_minimal()
+
+# Créer le graphique pour les classes prédites
+plot_predicted1 <- ggplot(results1, aes(x = ID, y = Predicted_Probabilities1, color = as.factor(Predicted_Class1))) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("lightblue4", "lightcoral"), labels = c("LGG", "GBM")) +
+  labs(title = "Classes Prédites des Points",
+       x = "ID des Observations",
+       y = "Probabilité Prédite",
+       color = "Classe Prédite") +
+  theme_minimal()
+
+grid.arrange(plot_actual1, plot_predicted1, ncol = 2)
+```
+
+
+```{r}
+library(gbm)
+library(pROC)
+
+# Définir une grille de valeurs de shrinkage à tester
+shrinkage_values <- c(0.1, 0.05, 0.01, 0.005, 0.001)
+
+# Créer une liste pour stocker les résultats
+models2 <- list()
+results2 <- data.frame(Shrinkage = numeric(), Optimal_Trees = numeric(), AUC = numeric())
+
+# Boucle pour tester chaque valeur de shrinkage
+for (shrinkage in shrinkage_values) {
+  set.seed(123)  # Pour la reproductibilité
+
+  # Former le modèle gbm avec la valeur actuelle de shrinkage
+  model2 <- gbm(
+    formula = Grade ~ ., 
+    distribution = "bernoulli", 
+    data = train_data, 
+    n.trees = 5000,              # Nombre d'arbres élevé pour capturer le nombre optimal
+    interaction.depth = 3,       # Profondeur d'interaction (ajustable)
+    shrinkage = shrinkage,       # Taux de réduction testé
+    n.minobsinnode = 10,         # Nombre minimum d'observations par noeud
+    cv.folds = 5,                # Validation croisée 5-fold
+    keep.data = TRUE, 
+    verbose = FALSE
+  )
+  
+  # Trouver le nombre optimal d'arbres
+  optimal_trees <- gbm.perf(model2, method = "cv", plot.it = FALSE)
+  
+  # Prédictions avec le nombre optimal d'arbres
+  test_predictions2 <- predict(model2, newdata = test_data, n.trees = optimal_trees, type = "response")
+  
+  # Calculer l'AUC
+  roc_curve2 <- roc(test_data$Grade, test_predictions2)
+  auc_value2 <- auc(roc_curve2)
+  
+  # Stocker les résultats
+  models2[[paste0("Shrinkage_", shrinkage)]] <- model2
+  results2 <- rbind(results2, data.frame(Shrinkage = shrinkage, Optimal_Trees = optimal_trees, AUC = auc_value2))
+}
+
+# Afficher les résultats
+print(results2)
+```
+
+
+```{r}
+best_model2 <- models2[[which.max(results2$AUC)]]
+best_shrinkage2 <- results2$Shrinkage[which.max(results$AUC)]
+best_trees2 <- results2$Optimal_Trees[which.max(results$AUC)]
+
+# Prédictions finales avec le meilleur modèle
+test_predictions2 <- predict(best_model2, newdata = test_data, n.trees = best_trees2, type = "response")
+
+# Calculer la courbe ROC et l'AUC pour l'ensemble de test
+roc_curve_test2 <- roc(test_data$Grade, test_predictions2)
+auc_test2 <- auc(roc_curve_test2)
+
+# Prédictions sur l'ensemble d'entraînement pour comparaison
+train_predictions2 <- predict(best_model2, newdata = train_data, n.trees = best_trees2, type = "response")
+
+# Calculer la courbe ROC et l'AUC pour l'ensemble d'entraînement
+roc_curve_train2 <- roc(train_data$Grade, train_predictions2)
+auc_train2 <- auc(roc_curve_train2)
+
+# Afficher les courbes ROC pour l'ensemble d'entraînement et de test
+plot(roc_curve_train2, col = "lightblue4", lwd = 2, main = "ROC Curve for Optimized LogitBoost Model")
+lines(roc_curve_test2, col = "lightcoral", lwd = 2)
+legend("bottomright", legend = c(paste("Train ROC curve (AUC = ", round(auc_train2, 2), ")", sep=""),
+                                 paste("Test ROC curve (AUC = ", round(auc_test2, 2), ")", sep="")),
+       col = c("lightblue4", "lightcoral"), lwd = 2)
+```
+
+
+```{r}
+# Prédictions finales avec le meilleur modèle
+test_predictions2 <- predict(best_model2, newdata = test_data, n.trees = best_trees2, type = "response")
+
+# Créer un dataframe avec les vraies classes et les prédictions
+results2 <- data.frame(
+  ID = 1:nrow(test_data),  # Identifiant unique pour chaque observation
+  Actual2 = test_data$Grade,  # Les vraies classes
+  Predicted_Probabilities2 = test_predictions2  # Les probabilités prédites par le modèle
+)
+
+# Ajouter une colonne pour les classes prédites (0 ou 1)
+results2$Predicted_Class2 <- ifelse(results2$Predicted_Probabilities2 > 0.5, 1, 0)
+
+plot_actual2 <- ggplot(results2, aes(x = ID, y = Predicted_Probabilities2, color = as.factor(Actual2))) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("lightblue3", "coral3"), labels = c("LGG", "GBM")) +
+  labs(title = "Vraies Classes des Points (Modèle Optimisé)",
+       x = "ID des Observations",
+       y = "Probabilité Prédite",
+       color = "Classe Réelle") +
+  theme_minimal()
+
+plot_predicted2 <- ggplot(results2, aes(x = ID, y = Predicted_Probabilities2, color = as.factor(Predicted_Class2))) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("lightblue3", "coral3"), labels = c("LGG", "GBM")) +
+  labs(title = "Classes Prédites des Points (Modèle Optimisé)",
+       x = "ID des Observations",
+       y = "Probabilité Prédite",
+       color = "Classe Prédite") +
+  theme_minimal()
+
+grid.arrange(plot_actual2, plot_predicted2, ncol = 2)
+```
+
+
+```{r}
+# Former un modèle gbm initial pour obtenir l'importance des variables
+model_initial <- gbm(
+  formula = Grade ~ ., 
+  distribution = "bernoulli", 
+  data = train_data, 
+  n.trees = 100,              # Nombre d'arbres pour l'évaluation de l'importance des variables
+  interaction.depth = 3,      
+  shrinkage = 1,           
+  n.minobsinnode = 10,        
+  cv.folds = 5,               
+  keep.data = TRUE, 
+  verbose = FALSE
+)
+
+# Obtenir l'importance des variables
+importance <- summary(model_initial, n.trees = 100)
+selected_features <- head(importance$var, 5)  # Remplacer 5 par le nombre souhaité
+print(selected_features)
+```
+
+
+```{r}
+# Créer une nouvelle formule avec les caractéristiques sélectionnées
+formula_selected <- as.formula(paste("Grade ~", paste(selected_features, collapse = " + ")))
+
+# Former le modèle gbm avec les caractéristiques sélectionnées et la validation croisée
+model_gbm_selected <- gbm(
+  formula = formula_selected, 
+  distribution = "bernoulli", 
+  data = train_data, 
+  n.trees = 5000,              
+  interaction.depth = 3,       
+  shrinkage = 0.001,           
+  n.minobsinnode = 10,         
+  cv.folds = 5,                
+  keep.data = TRUE, 
+  verbose = FALSE
+)
+
+# Trouver le nombre optimal d'arbres avec gbm.perf
+optimal_trees_selected <- gbm.perf(model_gbm_selected, method = "cv")
+print(paste("Nombre optimal d'arbres:", optimal_trees_selected))
+```
+
+
+```{r}
+# Prédictions avec le modèle optimisé
+# Prédictions finales avec le modèle optimisé
+train_predictions_selected <- predict(model_gbm_selected, newdata = train_data, n.trees = optimal_trees_selected, type = "response")
+test_predictions_selected <- predict(model_gbm_selected, newdata = test_data, n.trees = optimal_trees_selected, type = "response")
+
+
+# Courbe ROC et AUC pour l'ensemble d'entraînement
+roc_curve_train_selected <- roc(train_data$Grade, train_predictions_selected)
+auc_train_selected <- auc(roc_curve_train_selected)
+
+# Courbe ROC et AUC pour l'ensemble de test
+roc_curve_test_selected <- roc(test_data$Grade, test_predictions_selected)
+auc_test_selected <- auc(roc_curve_test_selected)
+
+# Tracer les courbes ROC pour l'ensemble d'entraînement et de test
+plot(roc_curve_train_selected, col = "lightblue3", lwd = 2, main = "ROC Curve for LogitBoost with Selected Features")
+lines(roc_curve_test_selected, col = "coral3", lwd = 2)
+legend("bottomright", legend = c(paste("Train ROC curve (AUC = ", round(auc_train_selected, 2), ")", sep=""),
+                                 paste("Test ROC curve (AUC = ", round(auc_test_selected, 2), ")", sep="")),
+       col = c("lightblue3", "coral3"), lwd = 2)
+```
+
+
+```{r}
+# Créer un dataframe avec les vraies classes et les prédictions
+results_selected <- data.frame(
+  ID = 1:nrow(test_data),  # Identifiant unique pour chaque observation
+  Actual3 = test_data$Grade,  # Les vraies classes
+  Predicted_Probabilities3 = test_predictions_selected  # Les probabilités prédites par le modèle
+)
+
+# Ajouter une colonne pour les classes prédites (0 ou 1)
+results_selected$Predicted_Class3 <- ifelse(results_selected$Predicted_Probabilities3 > 0.5, 1, 0)
+
+# Graphique pour les vraies classes
+plot_actual_selected <- ggplot(results_selected, aes(x = ID, y = Predicted_Probabilities3, color = as.factor(Actual3))) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("lightblue3", "coral3"), labels = c("LGG", "GBM")) +
+  labs(title = "Vraies Classes des Points (Caractéristiques Sélectionnées)",
+       x = "ID des Observations",
+       y = "Probabilité Prédite",
+       color = "Classe Réelle") +
+  theme_minimal()
+
+# Graphique pour les classes prédites
+plot_predicted_selected <- ggplot(results_selected, aes(x = ID, y = Predicted_Probabilities3, color = as.factor(Predicted_Class3))) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("lightblue3", "coral3"), labels = c("LGG", "GBM")) +
+  labs(title = "Classes Prédites des Points (Caractéristiques Sélectionnées)",
+       x = "ID des Observations",
+       y = "Probabilité Prédite",
+       color = "Classe Prédite") +
+  theme_minimal()
+
+grid.arrange(plot_actual_selected, plot_predicted_selected, ncol = 2)
+```
+
+
+```{r}
+install.packages("caret")
+library(caret)
+# Générer les prédictions sous forme de probabilités
+tpredictions1 <- predict(model_ref, newdata = test_data, n.trees = model_ref$n.trees, type = "response")
+
+# Convertir les probabilités en classes binaires (0 ou 1)
+binary_predictions_t1 <- ifelse(tpredictions1 > 0.5, 1, 0)
+
+# Créer une matrice de confusion en comparant les prédictions binaires aux vraies classes
+conf_matrix_t1 <- confusionMatrix(as.factor(binary_predictions_t1), as.factor(test_data$Grade))
+
+# Afficher la matrice de confusion
+print(conf_matrix_t1)
+
+trpredictions1 <- predict(model_ref, newdata = train_data, n.trees = model_ref$n.trees, type = "response")
+
+# Convertir les probabilités en classes binaires (0 ou 1)
+binary_predictions_tr1 <- ifelse(trpredictions1 > 0.5, 1, 0)
+
+# Créer une matrice de confusion en comparant les prédictions binaires aux vraies classes
+conf_matrix_tr1 <- confusionMatrix(as.factor(binary_predictions_tr1), as.factor(train_data$Grade))
+
+# Afficher la matrice de confusion
+print(conf_matrix_tr1)
+```
+
+
+```{r}
+# Générer les prédictions sous forme de probabilités
+tpredictions2 <- predict( best_model2, newdata = test_data, n.trees = best_trees2 , type = "response")
+
+# Convertir les probabilités en classes binaires (0 ou 1)
+binary_predictions_t2 <- ifelse(tpredictions2 > 0.5, 1, 0)
+
+# Créer une matrice de confusion en comparant les prédictions binaires aux vraies classes
+conf_matrix_t2 <- confusionMatrix(as.factor(binary_predictions_t2), as.factor(test_data$Grade))
+
+# Afficher la matrice de confusion
+print(conf_matrix_t2)
+
+trpredictions2 <- predict(best_model2, newdata = train_data, n.trees = best_trees2 , type = "response")
+
+# Convertir les probabilités en classes binaires (0 ou 1)
+binary_predictions_tr2 <- ifelse(trpredictions2 > 0.5, 1, 0)
+
+# Créer une matrice de confusion en comparant les prédictions binaires aux vraies classes
+conf_matrix_tr2 <- confusionMatrix(as.factor(binary_predictions_tr2), as.factor(train_data$Grade))
+
+# Afficher la matrice de confusion
+print(conf_matrix_tr2)
+```
+
+
+
+```{r}
+
+# Générer les prédictions sous forme de probabilités
+tpredictions3 <- predict( model_gbm_selected, newdata = test_data, n.trees = optimal_trees_selected , type = "response")
+
+# Convertir les probabilités en classes binaires (0 ou 1)
+binary_predictions_t3 <- ifelse(tpredictions3 > 0.5, 1, 0)
+
+# Créer une matrice de confusion en comparant les prédictions binaires aux vraies classes
+conf_matrix_t3 <- confusionMatrix(as.factor(binary_predictions_t3), as.factor(test_data$Grade))
+
+# Afficher la matrice de confusion
+print(conf_matrix_t3)
+
+trpredictions3 <- predict(model_gbm_selected, newdata = train_data, n.trees = optimal_trees_selected , type = "response")
+
+# Convertir les probabilités en classes binaires (0 ou 1)
+binary_predictions_tr3 <- ifelse(trpredictions3 > 0.5, 1, 0)
+
+# Créer une matrice de confusion en comparant les prédictions binaires aux vraies classes
+conf_matrix_tr3 <- confusionMatrix(as.factor(binary_predictions_tr3), as.factor(train_data$Grade))
+
+# Afficher la matrice de confusion
+print(conf_matrix_tr3)
+```
+
+
+
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
