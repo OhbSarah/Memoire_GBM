@@ -9,7 +9,8 @@ Ce dépôt contient un notebook R et les données utilisées pour l'analyse des 
 ## Instructions pour Exécuter le Code
 1. Clonez ou téléchargez ce dépôt.
 2. Assurez-vous que les données sont dans le dossier `data/`.
-3. Exécutez le script R (`script.Rmd`) directement dans RStudio.
+3. Ouvrez le fichier `notebook.Rmd` dans RStudio.
+4. Exécutez chaque cellule du notebook pour reproduire l'analyse.
 
 ## Remarques
 - Les chemins de fichier sont relatifs. Assurez-vous de ne pas changer la structure des dossiers.
