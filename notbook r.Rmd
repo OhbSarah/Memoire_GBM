@@ -10,8 +10,7 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 ```{r}
 install.packages("gbm")
 library(gbm)
-setwd("C:/Users/ouaha/Downloads/master")
-data <- read.csv('clinical_glioma_grading.csv', sep=",")
+data <- read.csv('data/clinical_glioma_grading.csv', sep=",")
 head(data)
 ```
 
