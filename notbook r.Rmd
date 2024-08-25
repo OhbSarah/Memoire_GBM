@@ -5,7 +5,7 @@ output: html_notebook
 
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+Analyse des données
 
 ```{r}
 install.packages("gbm")
@@ -33,7 +33,7 @@ options(repr.plot.width=8, repr.plot.height=6)
 bar3=ggplot(data, aes(x = Grade, fill = Grade)) + 
   geom_bar() + labs(title="Distribution of Glioma Grades") +
   scale_fill_manual(values = c("cadetblue2", "cadetblue4"), labels = c("LGG", "GBM")) + theme(
-    plot.title = element_text(hjust = 0.5, size = 20, face = "bold")  # Centrer et augmenter la taille du titre
+    plot.title = element_text(hjust = 0.5, size = 20, face = "bold") 
   )
 bar3
 head(data)
@@ -68,6 +68,7 @@ cor_matrix=cor(data,use = "complete.obs")
 cor_matrix
 ```
 
+Séparation des données en données test et données d'entraînement
 
 ```{r}
 train_index <- sample(1:nrow(data), 0.7 * nrow(data))  # 70% pour l'entraînement
@@ -78,7 +79,7 @@ test_data <- data[-train_index, ]
 head(test_data)
 head(train_data)
 ```
-
+Modèle de Réference avec toutes les variables et sans hyperparamètre
 
 ```{r}
 model_ref <- gbm(
@@ -88,7 +89,7 @@ model_ref <- gbm(
   n.trees = 100,  # Nombre d'arbres
   interaction.depth = 1,  # Profondeur d'interaction
   n.minobsinnode = 10,  # Nombre minimum d'observations dans un noeud
-  shrinkage = 1,  # Taux d'apprentissage élevé pour le modèle de référence
+  shrinkage = 1,  # Taux d'apprentissage
   bag.fraction = 0.5,  # Fraction des données utilisée pour chaque arbre
   train.fraction = 1,  # Utiliser toutes les données d'entraînement
   cv.folds = 0,  # Pas de validation croisée interne
@@ -125,7 +126,6 @@ legend("bottomright", legend = c(paste("Train ROC curve (AUC = ", round(auc_trai
 
 
 ```{r}
-# Supposons que vous avez déjà les prédictions du modèle
 # 'test_predictions' contient les probabilités prédites pour l'ensemble de test
 # 'test_data$Grade' contient les vraies classes (0 ou 1)
 
@@ -164,6 +164,7 @@ plot_predicted1 <- ggplot(results1, aes(x = ID, y = Predicted_Probabilities1, co
 grid.arrange(plot_actual1, plot_predicted1, ncol = 2)
 ```
 
+Modèle Optimisé avec les hyperparametres et toutes les variables
 
 ```{r}
 library(gbm)
@@ -178,15 +179,14 @@ results2 <- data.frame(Shrinkage = numeric(), Optimal_Trees = numeric(), AUC = n
 
 # Boucle pour tester chaque valeur de shrinkage
 for (shrinkage in shrinkage_values) {
-  set.seed(123)  # Pour la reproductibilité
-
+  set.seed(123)  
   # Former le modèle gbm avec la valeur actuelle de shrinkage
   model2 <- gbm(
     formula = Grade ~ ., 
     distribution = "bernoulli", 
     data = train_data, 
     n.trees = 5000,              # Nombre d'arbres élevé pour capturer le nombre optimal
-    interaction.depth = 3,       # Profondeur d'interaction (ajustable)
+    interaction.depth = 3,       # Profondeur d'interaction 
     shrinkage = shrinkage,       # Taux de réduction testé
     n.minobsinnode = 10,         # Nombre minimum d'observations par noeud
     cv.folds = 5,                # Validation croisée 5-fold
@@ -200,11 +200,9 @@ for (shrinkage in shrinkage_values) {
   # Prédictions avec le nombre optimal d'arbres
   test_predictions2 <- predict(model2, newdata = test_data, n.trees = optimal_trees, type = "response")
   
-  # Calculer l'AUC
   roc_curve2 <- roc(test_data$Grade, test_predictions2)
   auc_value2 <- auc(roc_curve2)
   
-  # Stocker les résultats
   models2[[paste0("Shrinkage_", shrinkage)]] <- model2
   results2 <- rbind(results2, data.frame(Shrinkage = shrinkage, Optimal_Trees = optimal_trees, AUC = auc_value2))
 }
@@ -222,18 +220,15 @@ best_trees2 <- results2$Optimal_Trees[which.max(results$AUC)]
 # Prédictions finales avec le meilleur modèle
 test_predictions2 <- predict(best_model2, newdata = test_data, n.trees = best_trees2, type = "response")
 
-# Calculer la courbe ROC et l'AUC pour l'ensemble de test
 roc_curve_test2 <- roc(test_data$Grade, test_predictions2)
 auc_test2 <- auc(roc_curve_test2)
 
 # Prédictions sur l'ensemble d'entraînement pour comparaison
 train_predictions2 <- predict(best_model2, newdata = train_data, n.trees = best_trees2, type = "response")
 
-# Calculer la courbe ROC et l'AUC pour l'ensemble d'entraînement
 roc_curve_train2 <- roc(train_data$Grade, train_predictions2)
 auc_train2 <- auc(roc_curve_train2)
 
-# Afficher les courbes ROC pour l'ensemble d'entraînement et de test
 plot(roc_curve_train2, col = "lightblue4", lwd = 2, main = "ROC Curve for Optimized LogitBoost Model")
 lines(roc_curve_test2, col = "lightcoral", lwd = 2)
 legend("bottomright", legend = c(paste("Train ROC curve (AUC = ", round(auc_train2, 2), ")", sep=""),
@@ -277,6 +272,7 @@ plot_predicted2 <- ggplot(results2, aes(x = ID, y = Predicted_Probabilities2, co
 grid.arrange(plot_actual2, plot_predicted2, ncol = 2)
 ```
 
+Modèle optimisé aves des variables selectionnées selon leurs incidences sur la variable cible Grade
 
 ```{r}
 # Former un modèle gbm initial pour obtenir l'importance des variables
@@ -325,7 +321,6 @@ print(paste("Nombre optimal d'arbres:", optimal_trees_selected))
 
 
 ```{r}
-# Prédictions avec le modèle optimisé
 # Prédictions finales avec le modèle optimisé
 train_predictions_selected <- predict(model_gbm_selected, newdata = train_data, n.trees = optimal_trees_selected, type = "response")
 test_predictions_selected <- predict(model_gbm_selected, newdata = test_data, n.trees = optimal_trees_selected, type = "response")
@@ -382,6 +377,7 @@ plot_predicted_selected <- ggplot(results_selected, aes(x = ID, y = Predicted_Pr
 grid.arrange(plot_actual_selected, plot_predicted_selected, ncol = 2)
 ```
 
+Matrice de confusion modèle 1
 
 ```{r}
 install.packages("caret")
@@ -409,7 +405,7 @@ conf_matrix_tr1 <- confusionMatrix(as.factor(binary_predictions_tr1), as.factor(
 # Afficher la matrice de confusion
 print(conf_matrix_tr1)
 ```
-
+Matrice de confusion modèle 2
 
 ```{r}
 # Générer les prédictions sous forme de probabilités
@@ -436,7 +432,7 @@ conf_matrix_tr2 <- confusionMatrix(as.factor(binary_predictions_tr2), as.factor(
 print(conf_matrix_tr2)
 ```
 
-
+Matrice de confusion modèle 3
 
 ```{r}
 
